@@ -1,0 +1,55 @@
+﻿@page "/"
+
+<PageTitle>💒 Matrimonio di Vanessa &amp; Simone</PageTitle>
+
+<div class="hero-section text-center mb-5">
+    <div class="card main-bg text-white">
+        <div class="card-body py-5">
+            <h1 class="display-4 mb-3">Vanessa &amp; Simone</h1>
+            <h2 class="mb-3">10 Aprile 2025</h2>
+            <p class="lead">Unisciti per celebrare con noi il nostro giorno speciale!</p>
+            <p class="mb-4">Carlo Magno, Collebeato</p>
+
+            <AuthorizeView>
+                <NotAuthorized>
+                    <div class="mt-4">
+                        <a href="Account/Register" class="btn btn-light btn-lg me-3">Registrati</a>
+                        <a href="Account/Login" class="btn btn-outline-light btn-lg">Login</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3 class="card-title">💌 Messaggi</h3>
+                <p class="card-text">Condividi un pensiero per il nostro giorno speciale.</p>
+                <a href="/messages" class="btn btn-primary">Vedi Messaggi</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3 class="card-title">📸 Foto</h3>
+                <p class="card-text">Condividi le tue foto preferite con noi.</p>
+                <a href="/photos" class="btn btn-primary">Vedi Foto</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3 class="card-title">🎁 Lista Nozze</h3>
+                <p class="card-text">Vuoi contribuire a rendere il nostro giorno unico?</p>
+                <a href="/gifts" class="btn btn-primary">Vedi Lista Nozze</a>
+            </div>
+        </div>
+    </div>
+</div>
