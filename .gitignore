@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Site specific
 wedding-site/
+/WeddingSite.Api/appsettings.json
+/WeddingSite.Api/Properties/ServiceDependencies/WeddingSiteApi - Zip Deploy
+/WeddingSite.Api/appsettings.json

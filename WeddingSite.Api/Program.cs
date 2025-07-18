@@ -19,7 +19,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJSClient", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://wedding-site-git-main-simov8s-projects.vercel.app/")
+        policy.WithOrigins("http://localhost:3000", "https://wedding-site-git-main-simov8s-projects.vercel.app/",
+            "https://wedding-site-r0z7enkw0-simov8s-projects.vercel.app", "https://wedding-site-blond-tau.vercel.app/")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -46,16 +47,17 @@ builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
+app.Logger.LogCritical("Application started");
+app.Logger.LogInformation("ConnectionString: " + connectionString);
 
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "Website API");
-    });
-}
+// Configure the HTTP request pipeline.
+
+app.MapOpenApi();
+
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/openapi/v1.json", "Website API");
+});
 
 app.UseHttpsRedirection();
 
