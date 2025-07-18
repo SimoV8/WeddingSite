@@ -48,8 +48,6 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 
 app.Logger.LogCritical("Application started");
-app.Logger.LogInformation("ConnectionString: " + connectionString);
-
 // Configure the HTTP request pipeline.
 
 app.MapOpenApi();
