@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using WeddingSite.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,8 +29,27 @@ builder.Services.AddCors(options =>
 });
 
 // Add Identity Authentication
-builder.Services.AddAuthentication()
-    .AddBearerToken(IdentityConstants.BearerScheme);
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+})
+    .AddBearerToken(IdentityConstants.BearerScheme)
+    .AddCookie(IdentityConstants.ApplicationScheme)
+    .AddCookie(IdentityConstants.ExternalScheme)
+    .AddGoogle(googleOptions =>
+    {
+        googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
+        googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+        // googleOptions.CallbackPath = "/User/google-callback";
+
+        googleOptions.Scope.Add("profile");
+        googleOptions.SignInScheme = Microsoft.AspNetCore.Identity.IdentityConstants.ExternalScheme;
+
+        // IMPORTANT: Configure the state data format to use SameSite=None
+        googleOptions.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+        googleOptions.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
+    });
 
 builder.Services.AddAuthorization();
 
@@ -39,7 +59,22 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddDefaultTokenProviders()
     .AddApiEndpoints();
 
-// builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// Also, ensure your overall cookie policy allows SameSite=None
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = Microsoft.AspNetCore.Http.SameSiteMode.None;
+    options.Secure = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Ensures cookies are sent only over HTTPS
+});
+
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
+                               Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    // Add any known proxies if applicable. For localhost, this might not be strictly needed unless using specific tools.
+    // options.KnownProxies.Add(IPAddress.Parse("YOUR_PROXY_IP"));
+});
+
 
 
 // Add HttpClient for Google token verification
@@ -58,6 +93,11 @@ app.UseSwaggerUI(options =>
 });
 
 app.UseHttpsRedirection();
+
+// Make sure you use app.UseCookiePolicy() in your pipeline
+app.UseCookiePolicy();
+
+app.UseForwardedHeaders();
 
 app.UseCors("AllowNextJSClient");
 
