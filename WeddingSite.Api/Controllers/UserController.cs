@@ -206,8 +206,8 @@ namespace WeddingSite.Api.Controllers
             }
         }
 
-        [HttpPost("external-login")]
-        public async Task<Results<UnauthorizedHttpResult, SignInHttpResult>> ExternalLogin()
+        [HttpPost("cookies-to-token")]
+        public async Task<Results<UnauthorizedHttpResult, SignInHttpResult>> CookiesToToken()
         {
             try
             {
@@ -220,12 +220,6 @@ namespace WeddingSite.Api.Controllers
                 foreach (var cookie in Request.Cookies)
                 {
                     logger.LogInformation($"Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
-                }
-
-                // Log all headers
-                foreach (var header in Request.Headers)
-                {
-                    logger.LogInformation($"Header: {header.Key} = {header.Value}");
                 }
 
                 // Check if user is authenticated via cookie (from Google OAuth)
@@ -261,35 +255,6 @@ namespace WeddingSite.Api.Controllers
                 logger.LogError(ex, "Error during external login token generation");
                 return TypedResults.Unauthorized();
             }
-        }
-
-        [HttpGet("auth-test")]
-        [AllowAnonymous]
-        public async Task<IActionResult> AuthTest()
-        {
-            logger.LogInformation("Auth test endpoint called");
-            logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
-            logger.LogInformation($"User.Identity.AuthenticationType: {User.Identity?.AuthenticationType}");
-            logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
-
-            if (User.Identity?.IsAuthenticated == true)
-            {
-                var user = await userManager.GetUserAsync(User);
-                return Ok(new
-                {
-                    authenticated = true,
-                    userEmail = user?.Email,
-                    authType = User.Identity.AuthenticationType,
-                    userName = User.Identity.Name
-                });
-            }
-
-            return Ok(new
-            {
-                authenticated = false,
-                cookieCount = Request.Cookies.Count,
-                cookies = Request.Cookies.Keys.ToList()
-            });
         }
 
     }

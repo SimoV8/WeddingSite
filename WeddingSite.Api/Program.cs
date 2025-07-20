@@ -1,8 +1,6 @@
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using WeddingSite.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,14 +60,16 @@ builder.Services.AddAuthentication(options =>
         googleOptions.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
     });
 
+builder.Services.ConfigureApplicationCookie(options =>
+    {
+
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.None;
+
+    });
+
 builder.Services.AddAuthorization(config =>
 {
-    // Define a fallback policy that requires authentication via EITHER Application (Cookie) or Bearer scheme
-    //config.FallbackPolicy = new AuthorizationPolicyBuilder()
-    //    .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, IdentityConstants.BearerScheme)
-    //    .RequireAuthenticatedUser()
-    //    .Build();
-
     config.DefaultPolicy = new AuthorizationPolicyBuilder()
        .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, IdentityConstants.BearerScheme)
        .RequireAuthenticatedUser()
@@ -115,6 +115,23 @@ app.UseSwaggerUI(options =>
     options.SwaggerEndpoint("/openapi/v1.json", "Website API");
 });
 
+// Configure only in prod.
+if (!app.Environment.IsDevelopment())
+{
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+
+    // This is to avoid problems with azure. See https://pellerex.com/blog/google-auth-for-react-with-aspnet-identity and https://github.com/dotnet/AspNetCore.Docs/issues/14169
+    app.Use((context, next) =>
+    {
+        context.Request.Host = new HostString("wedding-site-blond-tau.vercel.app");
+        context.Request.Scheme = "https";
+        return next();
+    });
+}
+
+
+
 app.UseHttpsRedirection();
 
 // Make sure you use app.UseCookiePolicy() in your pipeline
@@ -130,6 +147,11 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapIdentityApi<ApplicationUser>();
+
+app.MapGet("/", () =>
+{
+    return "Welecome to the WeddingSite API of Simone";
+}).AllowAnonymous();
 
 app.Run();
 
