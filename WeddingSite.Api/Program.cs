@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -32,16 +34,25 @@ builder.Services.AddCors(options =>
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
-    options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+    options.DefaultSignInScheme = IdentityConstants.BearerScheme;
 })
     .AddBearerToken(IdentityConstants.BearerScheme)
-    .AddCookie(IdentityConstants.ApplicationScheme)
-    .AddCookie(IdentityConstants.ExternalScheme)
+    .AddCookie(IdentityConstants.ApplicationScheme, config =>
+    {
+        // IMPORTANT: Configure the state data format to use SameSite=None
+        config.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+        config.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
+    })
+    .AddCookie(IdentityConstants.ExternalScheme, config =>
+    {
+        // IMPORTANT: Configure the state data format to use SameSite=None
+        config.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+        config.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
+    })
     .AddGoogle(googleOptions =>
     {
         googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
         googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-        // googleOptions.CallbackPath = "/User/google-callback";
 
         googleOptions.Scope.Add("profile");
         googleOptions.SignInScheme = Microsoft.AspNetCore.Identity.IdentityConstants.ExternalScheme;
@@ -51,7 +62,19 @@ builder.Services.AddAuthentication(options =>
         googleOptions.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(config =>
+{
+    // Define a fallback policy that requires authentication via EITHER Application (Cookie) or Bearer scheme
+    //config.FallbackPolicy = new AuthorizationPolicyBuilder()
+    //    .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, IdentityConstants.BearerScheme)
+    //    .RequireAuthenticatedUser()
+    //    .Build();
+
+    config.DefaultPolicy = new AuthorizationPolicyBuilder()
+       .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, IdentityConstants.BearerScheme)
+       .RequireAuthenticatedUser()
+       .Build();
+});
 
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>()

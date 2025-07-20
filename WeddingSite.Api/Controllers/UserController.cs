@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using WeddingSite.Api.Data;
 using WeddingSite.Api.Models;
+using RegisterRequest = WeddingSite.Api.Models.RegisterRequest;
 
 namespace WeddingSite.Api.Controllers
 {
@@ -110,12 +112,28 @@ namespace WeddingSite.Api.Controllers
                 return Redirect("http://localhost:3000/login?error=external_login_failed");
             }
 
+            logger.LogInformation("Before ExternalLoginSignInAsync - checking current cookies:");
+            foreach (var cookie in Request.Cookies)
+            {
+                logger.LogInformation($"Request Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
+            }
+
             var result = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false, bypassTwoFactor: true);
+
+            logger.LogInformation("After ExternalLoginSignInAsync - checking response cookies:");
+            foreach (var cookie in Request.Cookies)
+            {
+                logger.LogInformation($"Response Cookie being set: {cookie}");
+            }
 
             if (result.Succeeded)
             {
                 logger.LogInformation($"User logged in with {info.LoginProvider} provider");
-                return Redirect("http://localhost:3000/");
+                logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
+                logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
+
+                // Just redirect to a success page that will call our token exchange endpoint
+                return Redirect("http://localhost:3000/auth/google-success");
             }
 
             var email = info.Principal.FindFirstValue(ClaimTypes.Email);
@@ -133,7 +151,7 @@ namespace WeddingSite.Api.Controllers
                 {
                     await signInManager.SignInAsync(user, isPersistent: false);
                     logger.LogInformation($"External login '{info.LoginProvider}' added to existing user '{user.Email}'");
-                    return Redirect("http://localhost:3000/");
+                    return Redirect("http://localhost:3000/auth/google-success");
                 }
                 else
                 {
@@ -143,14 +161,14 @@ namespace WeddingSite.Api.Controllers
             }
             else
             {
-                var fullName = info.Principal.FindFirstValue(ClaimTypes.Name) ?? 
-                               info.Principal.FindFirstValue("name") ?? 
+                var fullName = info.Principal.FindFirstValue(ClaimTypes.Name) ??
+                               info.Principal.FindFirstValue("name") ??
                                email.Split('@')[0];
-                
-                var newUser = new ApplicationUser 
-                { 
-                    UserName = email, 
-                    Email = email, 
+
+                var newUser = new ApplicationUser
+                {
+                    UserName = email,
+                    Email = email,
                     EmailConfirmed = true,
                     FullName = fullName
                 };
@@ -163,7 +181,7 @@ namespace WeddingSite.Api.Controllers
                     {
                         await signInManager.SignInAsync(newUser, isPersistent: false);
                         logger.LogInformation($"New user '{newUser.Email}' created with external login '{info.LoginProvider}'");
-                        return Redirect("http://localhost:3000/");
+                        return Redirect("http://localhost:3000/auth/google-success");
                     }
                     else
                     {
@@ -179,5 +197,92 @@ namespace WeddingSite.Api.Controllers
                 }
             }
         }
+
+        [HttpPost("external-login")]
+        public async Task<Results<UnauthorizedHttpResult, SignInHttpResult>> ExternalLogin()
+        {
+            try
+            {
+                logger.LogInformation("External login endpoint called");
+                logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
+                logger.LogInformation($"User.Identity.AuthenticationType: {User.Identity?.AuthenticationType}");
+                logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
+
+                // Log all cookies
+                foreach (var cookie in Request.Cookies)
+                {
+                    logger.LogInformation($"Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
+                }
+
+                // Log all headers
+                foreach (var header in Request.Headers)
+                {
+                    logger.LogInformation($"Header: {header.Key} = {header.Value}");
+                }
+
+                // Check if user is authenticated via cookie (from Google OAuth)
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    var user = await userManager.GetUserAsync(User);
+                    logger.LogInformation($"Found user from UserManager: {user?.Email ?? "null"}");
+
+                    if (user != null)
+                    {
+                        logger.LogInformation($"Creating bearer tokens for external login user: {user.Email}");
+
+                        // Create user principal for bearer token
+                        var principal = await signInManager.CreateUserPrincipalAsync(user);
+
+                        var result = TypedResults.SignIn(principal, authenticationScheme: IdentityConstants.BearerScheme);
+
+                        logger.LogInformation($"Successfully created simple tokens for external login user: {user.Email}");
+                        logger.LogInformation(result?.ToString());
+                        return result;
+                    }
+                    else
+                    {
+                        logger.LogWarning("User is authenticated but UserManager.GetUserAsync returned null");
+                    }
+                }
+
+                logger.LogWarning("External login called but user not authenticated via cookie");
+                return TypedResults.Unauthorized();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error during external login token generation");
+                return TypedResults.Unauthorized();
+            }
+        }
+
+        [HttpGet("auth-test")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AuthTest()
+        {
+            logger.LogInformation("Auth test endpoint called");
+            logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
+            logger.LogInformation($"User.Identity.AuthenticationType: {User.Identity?.AuthenticationType}");
+            logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
+
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var user = await userManager.GetUserAsync(User);
+                return Ok(new
+                {
+                    authenticated = true,
+                    userEmail = user?.Email,
+                    authType = User.Identity.AuthenticationType,
+                    userName = User.Identity.Name
+                });
+            }
+
+            return Ok(new
+            {
+                authenticated = false,
+                cookieCount = Request.Cookies.Count,
+                cookies = Request.Cookies.Keys.ToList()
+            });
+        }
+
     }
 }
