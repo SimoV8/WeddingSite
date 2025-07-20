@@ -1,6 +1,33 @@
-@WeddingSite.Api_HostAddress = http://localhost:5047
+@WeddingSite.Api_HostAddress = http://localhost:3001
 
-GET {{WeddingSite.Api_HostAddress}}/weatherforecast/
+
+###
+
+# Messages endpoints
+
+GET {{WeddingSite.Api_HostAddress}}/messages
 Accept: application/json
+Authorization: Bearer YOUR_TOKEN_HERE
+
+###
+
+POST {{WeddingSite.Api_HostAddress}}/messages
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN_HERE
+
+{
+  "message": "Congratulazioni per il vostro matrimonio! Non vedo l'ora di festeggiare con voi.",
+  "authorName": "Marco Rossi"
+}
+
+###
+
+POST {{WeddingSite.Api_HostAddress}}/messages
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN_HERE
+
+{
+  "message": "Auguri di cuore!"
+}
 
 ###
