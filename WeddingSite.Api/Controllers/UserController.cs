@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 using System.Security.Claims;
 using WeddingSite.Api.Data;
 using WeddingSite.Api.Models;
@@ -86,10 +87,15 @@ namespace WeddingSite.Api.Controllers
         [AllowAnonymous]
         public IActionResult GoogleLogin(string returnUrl = null)
         {
-            //var redirectUrl = Url.Action(nameof(GoogleLoginCallback), "User", new { returnUrl });
-            //var properties = signInManager.ConfigureExternalAuthenticationProperties("Google", redirectUrl);
-            //return new ChallengeResult("Google", properties);
-            var redirectUrl = $"https://localhost:3001/User/google-callback?returnUrl={returnUrl}";
+            if (returnUrl == null)
+            {
+                this.Request.Headers.TryGetValue("Origin", out var origin);
+                returnUrl = origin.ToString();
+            }
+
+            var redirectUrl = $"{this.Request.Scheme}://{this.Request.Host}/User/google-callback?returnUrl={returnUrl}";
+
+            logger.LogWarning("Google Login Redirect URL: " + redirectUrl);
             var properties = signInManager.ConfigureExternalAuthenticationProperties("Google", redirectUrl);
             properties.AllowRefresh = true;
             return Challenge(properties, "Google");
@@ -99,17 +105,19 @@ namespace WeddingSite.Api.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> GoogleLoginCallback(string returnUrl = null, string remoteError = null)
         {
+            logger.LogWarning("Google Login Callback URL: " + returnUrl);
+
             if (remoteError != null)
             {
                 logger.LogError($"Error from Google: {remoteError}");
-                return Redirect($"http://localhost:3000/login?error={Uri.EscapeDataString(remoteError)}");
+                return Redirect($"{returnUrl}/login?error={Uri.EscapeDataString(remoteError)}");
             }
 
             var info = await signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
                 logger.LogError("Error loading external login information from Google");
-                return Redirect("http://localhost:3000/login?error=external_login_failed");
+                return Redirect($"{returnUrl}/login?error=external_login_failed");
             }
 
             logger.LogInformation("Before ExternalLoginSignInAsync - checking current cookies:");
@@ -133,7 +141,7 @@ namespace WeddingSite.Api.Controllers
                 logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
 
                 // Just redirect to a success page that will call our token exchange endpoint
-                return Redirect("http://localhost:3000/auth/google-success");
+                return Redirect($"{returnUrl}/auth/google-success");
             }
 
             var email = info.Principal.FindFirstValue(ClaimTypes.Email);
@@ -151,12 +159,12 @@ namespace WeddingSite.Api.Controllers
                 {
                     await signInManager.SignInAsync(user, isPersistent: false);
                     logger.LogInformation($"External login '{info.LoginProvider}' added to existing user '{user.Email}'");
-                    return Redirect("http://localhost:3000/auth/google-success");
+                    return Redirect($"{returnUrl}/auth/google-success");
                 }
                 else
                 {
                     logger.LogError($"Failed to add external login for existing user '{user.Email}': {string.Join(", ", addLoginResult.Errors.Select(e => e.Description))}");
-                    return Redirect("http://localhost:3000/login?error=link_failed");
+                    return Redirect($"{returnUrl}/login?error=link_failed");
                 }
             }
             else
@@ -181,19 +189,19 @@ namespace WeddingSite.Api.Controllers
                     {
                         await signInManager.SignInAsync(newUser, isPersistent: false);
                         logger.LogInformation($"New user '{newUser.Email}' created with external login '{info.LoginProvider}'");
-                        return Redirect("http://localhost:3000/auth/google-success");
+                        return Redirect($"{returnUrl}/auth/google-success");
                     }
                     else
                     {
                         await userManager.DeleteAsync(newUser);
                         logger.LogError($"Failed to add external login for new user '{newUser.Email}': {string.Join(", ", addLoginResult.Errors.Select(e => e.Description))}");
-                        return Redirect("http://localhost:3000/login?error=create_failed");
+                        return Redirect($"{returnUrl}/login?error=create_failed");
                     }
                 }
                 else
                 {
                     logger.LogError($"Failed to create new user with email '{email}': {string.Join(", ", createUserResult.Errors.Select(e => e.Description))}");
-                    return Redirect("http://localhost:3000/login?error=create_failed");
+                    return Redirect($"{returnUrl}/login?error=create_failed");
                 }
             }
         }
