@@ -124,7 +124,7 @@ if (!app.Environment.IsDevelopment())
     // This is to avoid problems with azure. See https://pellerex.com/blog/google-auth-for-react-with-aspnet-identity and https://github.com/dotnet/AspNetCore.Docs/issues/14169
     app.Use((context, next) =>
     {
-        context.Request.Host = new HostString("wedding-site-blond-tau.vercel.app");
+        context.Request.Host = new HostString("weddingsiteapi-gtadckbkbkh2fhe4.westeurope-01.azurewebsites.net");
         context.Request.Scheme = "https";
         return next();
     });
