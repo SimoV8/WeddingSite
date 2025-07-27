@@ -13,11 +13,18 @@ namespace WeddingSite.Api.Data
 
         public DbSet<WeddingMessage> WeddingMessages { get; set; } = null!;
 
+        public DbSet<WeddingParticipation> WeddingParticipation { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
 
             builder.Entity<WeddingMessage>()
+                .HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId);
+
+            builder.Entity<WeddingParticipation>()
                 .HasOne(m => m.User)
                 .WithMany()
                 .HasForeignKey(m => m.UserId);

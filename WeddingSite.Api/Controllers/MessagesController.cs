@@ -23,12 +23,11 @@ namespace WeddingSite.Api.Controllers
         }
 
         [HttpGet]
-        [AllowAnonymous]
         public async Task<IActionResult> GetMessages()
         {
             var messages = await context.WeddingMessages
                 .Include(m => m.User)
-                .OrderByDescending(m => m.CreatedAt)
+                .OrderBy(m => m.CreatedAt)
                 .Select(m => new
                 {
                     m.Id,
@@ -81,7 +80,12 @@ namespace WeddingSite.Api.Controllers
                 weddingMessage.UserId
             });
         }
+
+
+
     }
+
+
 
     public class CreateMessageRequest
     {
