@@ -1,0 +1,2 @@
+docker build . --tag europe-west1-docker.pkg.dev/matrimonio-vanessa-simone/weddingsite-backend/weddingsite-backend:latest
+docker push europe-west1-docker.pkg.dev/matrimonio-vanessa-simone/weddingsite-backend/weddingsite-backend:latest 

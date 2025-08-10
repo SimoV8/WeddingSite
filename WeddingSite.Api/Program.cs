@@ -132,7 +132,11 @@ if (!app.Environment.IsDevelopment())
 
 
 
-app.UseHttpsRedirection();
+// Only use HTTPS redirection in development - Cloud Run handles HTTPS termination
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // Make sure you use app.UseCookiePolicy() in your pipeline
 app.UseCookiePolicy();
@@ -150,9 +154,19 @@ app.MapIdentityApi<ApplicationUser>();
 
 app.MapGet("/", () =>
 {
-    return "Welecome to the WeddingSite API of Simone";
+    return "Welecome to the WeddingSite API of Simone Vuotto";
 }).AllowAnonymous();
 
+var port = Environment.GetEnvironmentVariable("PORT");
 
-app.Run();
+if (!string.IsNullOrEmpty(port))
+{
+    var url = $"http://0.0.0.0:{port}";
+
+    app.Run(url);
+} else
+{
+    app.Run();
+}
+
 
