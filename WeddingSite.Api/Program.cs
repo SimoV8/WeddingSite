@@ -147,7 +147,7 @@ app.MapGet("/", () =>
     return "Welecome to the WeddingSite API of Simone Vuotto";
 }).AllowAnonymous();
 
-var port = Environment.GetEnvironmentVariable("PORT");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 
 if (!string.IsNullOrEmpty(port))
 {
