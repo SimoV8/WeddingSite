@@ -19,8 +19,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJSClient", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://wedding-site-git-main-simov8s-projects.vercel.app/",
-            "https://wedding-site-r0z7enkw0-simov8s-projects.vercel.app", "https://wedding-site-blond-tau.vercel.app/")
+        policy.WithOrigins(Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(";") ?? ["http://localhost:3000"])
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
