@@ -5,9 +5,8 @@ using WeddingSite.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 builder.Services.AddControllers();
 
@@ -108,12 +107,9 @@ var app = builder.Build();
 app.Logger.LogCritical("Application started");
 // Configure the HTTP request pipeline.
 
-app.MapOpenApi();
 
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/openapi/v1.json", "Website API");
-});
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // Configure only in prod.
 if (!app.Environment.IsDevelopment())
@@ -131,12 +127,6 @@ if (!app.Environment.IsDevelopment())
 }
 
 
-
-// Only use HTTPS redirection in development - Cloud Run handles HTTPS termination
-if (app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
 
 // Make sure you use app.UseCookiePolicy() in your pipeline
 app.UseCookiePolicy();

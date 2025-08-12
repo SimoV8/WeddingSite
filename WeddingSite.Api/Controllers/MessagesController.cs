@@ -23,6 +23,7 @@ namespace WeddingSite.Api.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public async Task<IActionResult> GetMessages()
         {
             var messages = await context.WeddingMessages

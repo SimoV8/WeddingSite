@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
@@ -85,23 +87,47 @@ namespace WeddingSite.Api.Controllers
 
         [HttpGet("google-login")]
         [AllowAnonymous]
-        public IActionResult GoogleLogin(string returnUrl = null)
+        public IActionResult Login(string returnUrl = null)
         {
-            if (returnUrl == null)
+            var properties = new AuthenticationProperties
             {
-                this.Request.Headers.TryGetValue("Origin", out var origin);
-                returnUrl = origin.ToString();
-            }
-
-            var redirectUrl = $"{this.Request.Scheme}://{this.Request.Host}/User/google-callback?returnUrl={returnUrl}";
-
-            logger.LogWarning("Google Login Redirect URL: " + redirectUrl);
-            var properties = signInManager.ConfigureExternalAuthenticationProperties("Google", redirectUrl);
-            properties.AllowRefresh = true;
-            return Challenge(properties, "Google");
+                RedirectUri = Url.Action(nameof(Callback)),
+                Items = { ["returnUrl"] = returnUrl }
+            };
+            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
         }
 
         [HttpGet("google-callback")]
+        public async Task<IActionResult> Callback()
+        {
+            // Autentica con Google
+            var result = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+
+            if (!result.Succeeded)
+                return BadRequest("Google authentication failed");
+
+            // Estrai info utente dai claims Google
+            var googleUser = result.Principal;
+            var email = googleUser.FindFirst(ClaimTypes.Email)?.Value;
+            var name = googleUser.FindFirst(ClaimTypes.Name)?.Value;
+            var googleId = googleUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            //// Crea o trova utente nel tuo DB
+            //var user = await this.userService.FindOrCreateGoogleUser(email, name, googleId);
+
+            //// Genera il TUO JWT
+            //var jwtToken = _jwtService.GenerateToken(user);
+
+            //// Restituisci JSON con token invece di setting cookie
+            //return Ok(new
+            //{
+            //    token = jwtToken,
+            //    user = new { user.Email, user.Name }
+            //});
+            return Ok();
+        }
+
+        [HttpGet("google-callback2")]
         [AllowAnonymous]
         public async Task<IActionResult> GoogleLoginCallback(string returnUrl = null, string remoteError = null)
         {
