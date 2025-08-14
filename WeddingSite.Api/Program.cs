@@ -1,7 +1,12 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using WeddingSite.Api.Data;
+using WeddingSite.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,55 +26,38 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(";") ?? ["http://localhost:3000"])
               .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowAnyHeader();
     });
 });
 
-// Add Identity Authentication
+// Add Identity Authentication - JWT tokens only
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = IdentityConstants.ApplicationScheme;
-    options.DefaultSignInScheme = IdentityConstants.BearerScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-    .AddBearerToken(IdentityConstants.BearerScheme)
-    .AddCookie(IdentityConstants.ApplicationScheme, config =>
+    .AddJwtBearer(options =>
     {
-        // IMPORTANT: Configure the state data format to use SameSite=None
-        config.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
-        config.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
-    })
-    .AddCookie(IdentityConstants.ExternalScheme, config =>
-    {
-        // IMPORTANT: Configure the state data format to use SameSite=None
-        config.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
-        config.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
-    })
-    .AddGoogle(googleOptions =>
-    {
-        googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-        googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-
-        googleOptions.Scope.Add("profile");
-        googleOptions.SignInScheme = Microsoft.AspNetCore.Identity.IdentityConstants.ExternalScheme;
-
-        // IMPORTANT: Configure the state data format to use SameSite=None
-        googleOptions.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
-        googleOptions.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Required for SameSite=None
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+            ClockSkew = TimeSpan.Zero // no delay on token expiration
+        };
     });
 
-builder.Services.ConfigureApplicationCookie(options =>
-    {
-
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.Cookie.SameSite = SameSiteMode.None;
-
-    });
+builder.Services.AddScoped<ITokenService, TokenService>();
 
 builder.Services.AddAuthorization(config =>
 {
     config.DefaultPolicy = new AuthorizationPolicyBuilder()
-       .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, IdentityConstants.BearerScheme)
+       .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
        .RequireAuthenticatedUser()
        .Build();
 });
@@ -80,23 +68,11 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddDefaultTokenProviders()
     .AddApiEndpoints();
 
-// Also, ensure your overall cookie policy allows SameSite=None
-builder.Services.Configure<CookiePolicyOptions>(options =>
-{
-    options.MinimumSameSitePolicy = Microsoft.AspNetCore.Http.SameSiteMode.None;
-    options.Secure = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Ensures cookies are sent only over HTTPS
-});
-
-
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
                                Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
-    // Add any known proxies if applicable. For localhost, this might not be strictly needed unless using specific tools.
-    // options.KnownProxies.Add(IPAddress.Parse("YOUR_PROXY_IP"));
 });
-
-
 
 // Add HttpClient for Google token verification
 builder.Services.AddHttpClient();
@@ -115,20 +91,7 @@ if (!app.Environment.IsDevelopment())
 {
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
-
-    // This is to avoid problems with azure. See https://pellerex.com/blog/google-auth-for-react-with-aspnet-identity and https://github.com/dotnet/AspNetCore.Docs/issues/14169
-    //app.Use((context, next) =>
-    //{
-    //    context.Request.Host = new HostString("weddingsiteapi-gtadckbkbkh2fhe4.westeurope-01.azurewebsites.net");
-    //    context.Request.Scheme = "https";
-    //    return next();
-    //});
 }
-
-
-
-// Make sure you use app.UseCookiePolicy() in your pipeline
-app.UseCookiePolicy();
 
 app.UseForwardedHeaders();
 
@@ -139,14 +102,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapIdentityApi<ApplicationUser>();
 
 app.MapGet("/", () =>
 {
-    return "Welecome to the WeddingSite API of Simone Vuotto";
+    return "Welecome to the WeddingSite API of Simone Vuotto!";
 }).AllowAnonymous();
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var port = Environment.GetEnvironmentVariable("PORT");
 
 if (!string.IsNullOrEmpty(port))
 {

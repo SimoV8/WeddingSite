@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace WeddingSite.Api.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("[controller]")]
     [ApiController]
     public class PhotosController : ControllerBase
     {

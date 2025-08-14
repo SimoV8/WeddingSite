@@ -1,13 +1,14 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
-using System.Linq;
-using System.Security.Claims;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+using System.Text.Json;
 using WeddingSite.Api.Data;
 using WeddingSite.Api.Models;
+using WeddingSite.Api.Services;
 using RegisterRequest = WeddingSite.Api.Models.RegisterRequest;
 
 namespace WeddingSite.Api.Controllers
@@ -20,12 +21,19 @@ namespace WeddingSite.Api.Controllers
         private readonly UserManager<ApplicationUser> userManager;
         private readonly SignInManager<ApplicationUser> signInManager;
         private readonly ILogger<UserController> logger;
+        private readonly HttpClient httpClient;
+        private readonly IConfiguration configuration;
+        private readonly ITokenService tokenService;
 
-        public UserController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, ILogger<UserController> logger)
+        public UserController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
+            ILogger<UserController> logger, HttpClient httpClient, IConfiguration configuration, ITokenService tokenService)
         {
             this.userManager = userManager;
             this.signInManager = signInManager;
             this.logger = logger;
+            this.httpClient = httpClient;
+            this.configuration = configuration;
+            this.tokenService = tokenService;
         }
 
         [HttpPost("register")]
@@ -64,6 +72,55 @@ namespace WeddingSite.Api.Controllers
             return BadRequest(result.Errors);
         }
 
+        [HttpPost("login")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
+            var user = await userManager.FindByEmailAsync(request.Email);
+            if (user == null)
+            {
+                return BadRequest("Invalid credentials");
+            }
+
+            var result = await signInManager.CheckPasswordSignInAsync(user, request.Password, false);
+            if (!result.Succeeded)
+            {
+                Results.BadRequest("Invalid credentials");
+            }
+
+            var token = tokenService.GenerateTokens(user);
+            return Ok(token);
+        }
+
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshRequest request)
+        {
+            var user = tokenService.ValidateRefreshToken(request.RefreshToken);
+
+            // validate refresh token
+            if (user == null)
+            {
+                return BadRequest("Invalid refresh token");
+            }
+
+            var tokens = tokenService.GenerateTokens(user);
+            return Ok(tokens);
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var user = await userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return BadRequest("User not found");
+            }
+            tokenService.RevokeRefreshToken(user.Id);
+            return Ok();
+        }
+
+
         [HttpGet("info")]
         public async Task<IActionResult> GetUserInfo()
         {
@@ -87,200 +144,202 @@ namespace WeddingSite.Api.Controllers
 
         [HttpGet("google-login")]
         [AllowAnonymous]
-        public IActionResult Login(string returnUrl = null)
+        public IActionResult GoogleLogin(string? returnUrl = null)
         {
-            var properties = new AuthenticationProperties
+            var clientId = configuration["Authentication:Google:ClientId"];
+            if (string.IsNullOrEmpty(clientId))
             {
-                RedirectUri = Url.Action(nameof(Callback)),
-                Items = { ["returnUrl"] = returnUrl }
-            };
-            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+                return BadRequest("Google OAuth not configured");
+            }
+
+            var redirectUri = $"{Request.Scheme}://{Request.Host}/User/google-callback";
+            var state = returnUrl ?? string.Empty; // Pass returnUrl as state parameter
+
+            var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth?" +
+                         $"client_id={Uri.EscapeDataString(clientId)}&" +
+                         $"redirect_uri={Uri.EscapeDataString(redirectUri)}&" +
+                         $"response_type=code&" +
+                         $"scope={Uri.EscapeDataString("openid email profile")}&" +
+                         $"state={Uri.EscapeDataString(state)}";
+
+            logger.LogInformation($"Redirecting to Google OAuth: {authUrl}");
+            return Redirect(authUrl);
         }
+
 
         [HttpGet("google-callback")]
-        public async Task<IActionResult> Callback()
-        {
-            // Autentica con Google
-            var result = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
-
-            if (!result.Succeeded)
-                return BadRequest("Google authentication failed");
-
-            // Estrai info utente dai claims Google
-            var googleUser = result.Principal;
-            var email = googleUser.FindFirst(ClaimTypes.Email)?.Value;
-            var name = googleUser.FindFirst(ClaimTypes.Name)?.Value;
-            var googleId = googleUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            //// Crea o trova utente nel tuo DB
-            //var user = await this.userService.FindOrCreateGoogleUser(email, name, googleId);
-
-            //// Genera il TUO JWT
-            //var jwtToken = _jwtService.GenerateToken(user);
-
-            //// Restituisci JSON con token invece di setting cookie
-            //return Ok(new
-            //{
-            //    token = jwtToken,
-            //    user = new { user.Email, user.Name }
-            //});
-            return Ok();
-        }
-
-        [HttpGet("google-callback2")]
         [AllowAnonymous]
-        public async Task<IActionResult> GoogleLoginCallback(string returnUrl = null, string remoteError = null)
+        public async Task<IActionResult> GoogleCallback(string? code = null, string? error = null, string? state = null)
         {
-            logger.LogWarning("Google Login Callback URL: " + returnUrl);
+            var returnUrl = !string.IsNullOrEmpty(state) ? state :
+                Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(";")[0] ?? "http://localhost:3000";
 
-            if (remoteError != null)
+            if (!string.IsNullOrEmpty(error))
             {
-                logger.LogError($"Error from Google: {remoteError}");
-                return Redirect($"{returnUrl}/login?error={Uri.EscapeDataString(remoteError)}");
+                logger.LogError($"Google OAuth error: {error}");
+                return Redirect($"{returnUrl}/login?error={Uri.EscapeDataString(error)}");
             }
 
-            var info = await signInManager.GetExternalLoginInfoAsync();
-            if (info == null)
+            if (string.IsNullOrEmpty(code))
             {
-                logger.LogError("Error loading external login information from Google");
-                return Redirect($"{returnUrl}/login?error=external_login_failed");
+                logger.LogError("No authorization code received from Google");
+                return Redirect($"{returnUrl}/login?error=no_code");
             }
 
-            logger.LogInformation("Before ExternalLoginSignInAsync - checking current cookies:");
-            foreach (var cookie in Request.Cookies)
-            {
-                logger.LogInformation($"Request Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
-            }
-
-            var result = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false, bypassTwoFactor: true);
-
-            logger.LogInformation("After ExternalLoginSignInAsync - checking response cookies:");
-            foreach (var cookie in Request.Cookies)
-            {
-                logger.LogInformation($"Response Cookie being set: {cookie}");
-            }
-
-            if (result.Succeeded)
-            {
-                logger.LogInformation($"User logged in with {info.LoginProvider} provider");
-                logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
-                logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
-
-                // Just redirect to a success page that will call our token exchange endpoint
-                return Redirect($"{returnUrl}/auth/google-success");
-            }
-
-            var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(email))
-            {
-                logger.LogError("Email claim not found from Google");
-                return Redirect("http://localhost:3000/login?error=email_not_found");
-            }
-
-            var user = await userManager.FindByEmailAsync(email);
-            if (user != null)
-            {
-                var addLoginResult = await userManager.AddLoginAsync(user, info);
-                if (addLoginResult.Succeeded)
-                {
-                    await signInManager.SignInAsync(user, isPersistent: false);
-                    logger.LogInformation($"External login '{info.LoginProvider}' added to existing user '{user.Email}'");
-                    return Redirect($"{returnUrl}/auth/google-success");
-                }
-                else
-                {
-                    logger.LogError($"Failed to add external login for existing user '{user.Email}': {string.Join(", ", addLoginResult.Errors.Select(e => e.Description))}");
-                    return Redirect($"{returnUrl}/login?error=link_failed");
-                }
-            }
-            else
-            {
-                var fullName = info.Principal.FindFirstValue(ClaimTypes.Name) ??
-                               info.Principal.FindFirstValue("name") ??
-                               email.Split('@')[0];
-
-                var newUser = new ApplicationUser
-                {
-                    UserName = email,
-                    Email = email,
-                    EmailConfirmed = true,
-                    FullName = fullName
-                };
-
-                var createUserResult = await userManager.CreateAsync(newUser);
-                if (createUserResult.Succeeded)
-                {
-                    var addLoginResult = await userManager.AddLoginAsync(newUser, info);
-                    if (addLoginResult.Succeeded)
-                    {
-                        await signInManager.SignInAsync(newUser, isPersistent: false);
-                        logger.LogInformation($"New user '{newUser.Email}' created with external login '{info.LoginProvider}'");
-                        return Redirect($"{returnUrl}/auth/google-success");
-                    }
-                    else
-                    {
-                        await userManager.DeleteAsync(newUser);
-                        logger.LogError($"Failed to add external login for new user '{newUser.Email}': {string.Join(", ", addLoginResult.Errors.Select(e => e.Description))}");
-                        return Redirect($"{returnUrl}/login?error=create_failed");
-                    }
-                }
-                else
-                {
-                    logger.LogError($"Failed to create new user with email '{email}': {string.Join(", ", createUserResult.Errors.Select(e => e.Description))}");
-                    return Redirect($"{returnUrl}/login?error=create_failed");
-                }
-            }
-        }
-
-        [HttpPost("cookies-to-token")]
-        public async Task<Results<UnauthorizedHttpResult, SignInHttpResult>> CookiesToToken()
-        {
             try
             {
-                logger.LogInformation("External login endpoint called");
-                logger.LogInformation($"User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}");
-                logger.LogInformation($"User.Identity.AuthenticationType: {User.Identity?.AuthenticationType}");
-                logger.LogInformation($"User.Identity.Name: {User.Identity?.Name}");
+                logger.LogInformation("Processing Google OAuth callback");
 
-                // Log all cookies
-                foreach (var cookie in Request.Cookies)
+                // Exchange authorization code for access token
+                var redirectUri = $"{Request.Scheme}://{Request.Host}/User/google-callback";
+                var tokenResponse = await ExchangeCodeForTokens(code, redirectUri);
+                if (tokenResponse == null)
                 {
-                    logger.LogInformation($"Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
+                    logger.LogError("Failed to exchange authorization code for access token");
+                    return Redirect($"{returnUrl}/login?error=token_exchange_failed");
                 }
 
-                // Check if user is authenticated via cookie (from Google OAuth)
-                if (User.Identity?.IsAuthenticated == true)
+                // Get user info from Google
+                var userInfo = await GetGoogleUserInfo(tokenResponse.AccessToken);
+                if (userInfo == null)
                 {
-                    var user = await userManager.GetUserAsync(User);
-                    logger.LogInformation($"Found user from UserManager: {user?.Email ?? "null"}");
-
-                    if (user != null)
-                    {
-                        logger.LogInformation($"Creating bearer tokens for external login user: {user.Email}");
-
-                        // Create user principal for bearer token
-                        var principal = await signInManager.CreateUserPrincipalAsync(user);
-
-                        var result = TypedResults.SignIn(principal, authenticationScheme: IdentityConstants.BearerScheme);
-
-                        logger.LogInformation($"Successfully created simple tokens for external login user: {user.Email}");
-                        logger.LogInformation(result?.ToString());
-                        return result;
-                    }
-                    else
-                    {
-                        logger.LogWarning("User is authenticated but UserManager.GetUserAsync returned null");
-                    }
+                    logger.LogError("Failed to get user info from Google");
+                    return Redirect($"{returnUrl}/login?error=user_info_failed");
                 }
 
-                logger.LogWarning("External login called but user not authenticated via cookie");
-                return TypedResults.Unauthorized();
+                // Find or create user
+                var user = await FindOrCreateUser(userInfo);
+                if (user == null)
+                {
+                    logger.LogError("Failed to create or find user");
+                    return Redirect($"{returnUrl}/login?error=user_creation_failed");
+                }
+
+                logger.LogInformation($"User authentication successful: {user.Email}");
+
+
+                var token = tokenService.GenerateTokens(user);
+
+                var settings = new JsonSerializerSettings
+                {
+                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                    NullValueHandling = NullValueHandling.Ignore,
+                };
+
+                var json = JsonConvert.SerializeObject(token, settings);
+
+                // Redirect to frontend with JWT token
+                return Redirect($"{returnUrl}#token={Uri.EscapeDataString(json)}");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error during external login token generation");
-                return TypedResults.Unauthorized();
+                logger.LogError(ex, "Error during Google OAuth callback processing");
+                return Redirect($"{returnUrl}/login?error=authentication_failed");
             }
+        }
+
+        // This model matches what Identity encodes in its bearer token
+        internal record AccessTokenPayload(string UserId, DateTimeOffset Expires);
+
+        private static string GenerateIdentityBearerToken(ApplicationUser user, TimeSpan lifetime, IDataProtectionProvider provider)
+        {
+            var payload = new AccessTokenPayload(user.Id, DateTimeOffset.UtcNow.Add(lifetime));
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+
+            var protector = provider.CreateProtector("Identity.BearerToken");
+            return protector.Protect(json);
+        }
+
+        private async Task<GoogleTokenResponse?> ExchangeCodeForTokens(string code, string redirectUri)
+        {
+            var clientId = configuration["Authentication:Google:ClientId"];
+            var clientSecret = configuration["Authentication:Google:ClientSecret"];
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+            {
+                logger.LogError("Google OAuth credentials not configured");
+                return null;
+            }
+
+            var tokenRequest = new Dictionary<string, string>
+            {
+                ["code"] = code,
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "authorization_code",
+                ["redirect_uri"] = redirectUri
+            };
+
+            var requestContent = new FormUrlEncodedContent(tokenRequest);
+            var response = await httpClient.PostAsync("https://oauth2.googleapis.com/token", requestContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                logger.LogError($"Google token exchange failed: {response.StatusCode} - {error}");
+                return null;
+            }
+
+            var jsonResponse = await response.Content.ReadAsStringAsync();
+            return System.Text.Json.JsonSerializer.Deserialize<GoogleTokenResponse>(jsonResponse);
+        }
+
+        private async Task<GoogleUserInfo?> GetGoogleUserInfo(string accessToken)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/oauth2/v2/userinfo");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+            var response = await httpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                logger.LogError($"Google user info request failed: {response.StatusCode} - {error}");
+                return null;
+            }
+
+            var jsonResponse = await response.Content.ReadAsStringAsync();
+            return System.Text.Json.JsonSerializer.Deserialize<GoogleUserInfo>(jsonResponse);
+        }
+
+        private async Task<ApplicationUser?> FindOrCreateUser(GoogleUserInfo googleUser)
+        {
+            if (string.IsNullOrEmpty(googleUser.Email))
+            {
+                logger.LogError("Google user info missing email");
+                return null;
+            }
+
+            // Try to find existing user
+            var existingUser = await userManager.FindByEmailAsync(googleUser.Email);
+            if (existingUser != null)
+            {
+                logger.LogInformation($"Found existing user: {existingUser.Email}");
+                return existingUser;
+            }
+
+            // Create new user
+            var fullName = !string.IsNullOrEmpty(googleUser.Name)
+                ? googleUser.Name
+                : googleUser.Email.Split('@')[0];
+
+            var newUser = new ApplicationUser
+            {
+                UserName = googleUser.Email,
+                Email = googleUser.Email,
+                EmailConfirmed = true,
+                FullName = fullName
+            };
+
+            var createResult = await userManager.CreateAsync(newUser);
+            if (createResult.Succeeded)
+            {
+                logger.LogInformation($"Created new user: {newUser.Email}");
+                return newUser;
+            }
+
+            logger.LogError($"Failed to create user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
+            return null;
         }
 
     }
