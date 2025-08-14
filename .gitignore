@@ -364,3 +364,5 @@ FodyWeavers.xsd
 
 # Site specific
 claude.md
+.claude
+WeddingSite.Api/appsettings.json
