@@ -28,7 +28,7 @@ namespace WeddingSite.Api.Controllers
         {
             var messages = await context.WeddingMessages
                 .Include(m => m.User)
-                .OrderBy(m => m.CreatedAt)
+                .OrderByDescending(m => m.CreatedAt)
                 .Select(m => new
                 {
                     m.Id,
