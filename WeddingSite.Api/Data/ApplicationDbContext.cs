@@ -17,6 +17,8 @@ namespace WeddingSite.Api.Data
 
         public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
 
+        public DbSet<UserUploadedPhoto> UserUploadedPhotos { get; set; }
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -39,7 +41,13 @@ namespace WeddingSite.Api.Data
 
                 entity.Property(e => e.RefreshToken).HasColumnType("VARCHAR").HasMaxLength(250);
             });
-               
+
+            builder.Entity<UserUploadedPhoto>()
+               .HasOne(m => m.User)
+               .WithMany()
+               .HasForeignKey(m => m.UserId)
+               .OnDelete(DeleteBehavior.NoAction);
+
         }
     }
 }
