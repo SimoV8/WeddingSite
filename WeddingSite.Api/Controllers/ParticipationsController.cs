@@ -31,7 +31,7 @@ namespace WeddingSite.Api.Controllers
                 return Unauthorized("User not found");
             }
 
-            var weddingParticipations = await context.WeddingParticipation
+            var weddingParticipations = await context.WeddingParticipations
                 .Where(m => m.UserId == user.Id)
                 .Include(m => m.User)
                 .OrderByDescending(m => m.Id)
@@ -68,7 +68,7 @@ namespace WeddingSite.Api.Controllers
                 User = user
             };
 
-            context.WeddingParticipation.Add(weddingParticipation);
+            context.WeddingParticipations.Add(weddingParticipation);
             await context.SaveChangesAsync();
 
             return Ok(new
@@ -90,7 +90,7 @@ namespace WeddingSite.Api.Controllers
                 return Unauthorized("User not found");
             }
 
-            var weddingParticipation = context.WeddingParticipation.Where(m => m.UserId == user.Id).FirstOrDefault(p => p.Id == id);
+            var weddingParticipation = context.WeddingParticipations.Where(m => m.UserId == user.Id).FirstOrDefault(p => p.Id == id);
 
             if (weddingParticipation == null)
             {
@@ -123,14 +123,14 @@ namespace WeddingSite.Api.Controllers
                 return Unauthorized("User not found");
             }
 
-            var weddingParticipation = context.WeddingParticipation.Where(m => m.UserId == user.Id).FirstOrDefault(p => p.Id == id);
+            var weddingParticipation = context.WeddingParticipations.Where(m => m.UserId == user.Id).FirstOrDefault(p => p.Id == id);
 
             if (weddingParticipation == null)
             {
                 return NotFound();
             }
 
-            context.WeddingParticipation.Remove(weddingParticipation);
+            context.WeddingParticipations.Remove(weddingParticipation);
 
             await context.SaveChangesAsync();
 
