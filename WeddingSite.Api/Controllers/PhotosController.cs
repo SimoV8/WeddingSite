@@ -109,16 +109,16 @@ namespace WeddingSite.Api.Controllers
 
                 logger.LogInformation($"File '{fileName}' uploaded successfully");
 
+                // 7. Return a success response
+                return Ok(uploadedPhoto);
+
             }
             catch (IOException ex)
             {
                 logger.LogError(ex, $"File upload of '{fileName}' failed");
                 // Log the exception for debugging
                 return StatusCode(500, $"An error occurred while saving the file: {ex.Message}");
-            }
-
-            // 6. Return a success response
-            return Ok(new { Message = "File uploaded successfully", FileName = fileName });
+            }    
         }
 
         /// <summary>
