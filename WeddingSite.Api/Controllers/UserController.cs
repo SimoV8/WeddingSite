@@ -238,18 +238,6 @@ namespace WeddingSite.Api.Controllers
             }
         }
 
-        // This model matches what Identity encodes in its bearer token
-        internal record AccessTokenPayload(string UserId, DateTimeOffset Expires);
-
-        private static string GenerateIdentityBearerToken(ApplicationUser user, TimeSpan lifetime, IDataProtectionProvider provider)
-        {
-            var payload = new AccessTokenPayload(user.Id, DateTimeOffset.UtcNow.Add(lifetime));
-            var json = System.Text.Json.JsonSerializer.Serialize(payload);
-
-            var protector = provider.CreateProtector("Identity.BearerToken");
-            return protector.Protect(json);
-        }
-
         private async Task<GoogleTokenResponse?> ExchangeCodeForTokens(string code, string redirectUri)
         {
             var clientId = configuration["Authentication:Google:ClientId"];

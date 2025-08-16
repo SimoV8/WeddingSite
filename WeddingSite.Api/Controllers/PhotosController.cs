@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using WeddingSite.Api.Data;
 using WeddingSite.Api.Models;
+using WeddingSite.Api.Services;
 
 namespace WeddingSite.Api.Controllers
 {
@@ -15,12 +16,14 @@ namespace WeddingSite.Api.Controllers
         private const string BUCKET_NAME = "wedding-vanessa-simone-bucket";
         private readonly ApplicationDbContext applicationDbContext;
         private readonly UserManager<ApplicationUser> userManager;
+        private readonly IUserDBLog userDBLog;
         private readonly ILogger<MessagesController> logger;
 
-        public PhotosController(ApplicationDbContext applicationDbContext, UserManager<ApplicationUser> userManager, ILogger<MessagesController> logger)
+        public PhotosController(ApplicationDbContext applicationDbContext, UserManager<ApplicationUser> userManager, IUserDBLog userDBLog, ILogger<MessagesController> logger)
         {
             this.applicationDbContext = applicationDbContext;
             this.userManager = userManager;
+            this.userDBLog = userDBLog;
             this.logger = logger;
         }
 
@@ -93,10 +96,13 @@ namespace WeddingSite.Api.Controllers
             var timestamp = System.DateTime.Now.ToString("yyyyMMddHHmmssfff");
             var fileName = $"{user.Id}-{timestamp}{fileExtension}";
             
+
             // 5. Save the file to the google cloud bucket asynchronously
             try
             {
                 logger.LogInformation($"Uploading file '{fileName}'");
+                await userDBLog.LogAsync(user, $"Uploading file '{fileName}'");
+
                 var client = await StorageClient.CreateAsync();
                 using (var stream = new MemoryStream())
                 {
@@ -134,7 +140,7 @@ namespace WeddingSite.Api.Controllers
             catch (IOException ex)
             {
                 logger.LogError(ex, $"File upload of '{fileName}' failed");
-                // Log the exception for debugging
+                // LogAsync the exception for debugging
                 return StatusCode(500, $"An error occurred while saving the file: {ex.Message}");
             }    
         }
@@ -160,6 +166,8 @@ namespace WeddingSite.Api.Controllers
             {
                 return NotFound("Photo not found");
             }
+
+            await userDBLog.LogAsync(user, $"Deleting file '{uploadedPhoto.FileName}'");
 
             var client = await StorageClient.CreateAsync();
             await client.DeleteObjectAsync(BUCKET_NAME, photoId);

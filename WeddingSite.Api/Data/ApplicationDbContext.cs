@@ -19,6 +19,10 @@ namespace WeddingSite.Api.Data
 
         public DbSet<UserUploadedPhoto> UserUploadedPhotos { get; set; }
 
+        public DbSet<WeddingGift> WeddingGifts { get; set; } = null!;
+
+        public DbSet<UserActionLog> UserActionLogs { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -43,6 +47,18 @@ namespace WeddingSite.Api.Data
             });
 
             builder.Entity<UserUploadedPhoto>()
+               .HasOne(m => m.User)
+               .WithMany()
+               .HasForeignKey(m => m.UserId)
+               .OnDelete(DeleteBehavior.NoAction);
+
+            builder.Entity<WeddingGift>()
+               .HasOne(m => m.User)
+               .WithMany()
+               .HasForeignKey(m => m.UserId)
+               .OnDelete(DeleteBehavior.NoAction);
+
+            builder.Entity<UserActionLog>()
                .HasOne(m => m.User)
                .WithMany()
                .HasForeignKey(m => m.UserId)

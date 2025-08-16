@@ -68,6 +68,7 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IUserDBLog, UserDBLog>();
 
 builder.Services.AddAuthorization(config =>
 {

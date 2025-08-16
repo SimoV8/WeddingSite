@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WeddingSite.Api.Data;
+using WeddingSite.Api.Services;
 
 namespace WeddingSite.Api.Controllers
 {
@@ -13,12 +14,14 @@ namespace WeddingSite.Api.Controllers
     {
         private readonly ApplicationDbContext context;
         private readonly UserManager<ApplicationUser> userManager;
+        private readonly UserDBLog userDBLog;
         private readonly ILogger<MessagesController> logger;
 
-        public ParticipationsController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, ILogger<MessagesController> logger)
+        public ParticipationsController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, UserDBLog userDBLog, ILogger<MessagesController> logger)
         {
             this.context = context;
             this.userManager = userManager;
+            this.userDBLog = userDBLog;
             this.logger = logger;
         }
 
@@ -68,6 +71,8 @@ namespace WeddingSite.Api.Controllers
                 User = user
             };
 
+            await userDBLog.LogAsync(user, $"Creating participation: {weddingParticipation}");
+
             context.WeddingParticipations.Add(weddingParticipation);
             await context.SaveChangesAsync();
 
@@ -97,12 +102,17 @@ namespace WeddingSite.Api.Controllers
                 return NotFound();
             }
 
+            await userDBLog.LogAsync(user, $"Changin participation: {weddingParticipation}");
+
             weddingParticipation.ParticipantFullName = request.ParticipantFullName;
             weddingParticipation.AgeCategory = request.AgeCategory;
             weddingParticipation.Present = request.Present;
             weddingParticipation.Notes = request.Notes;
 
             await context.SaveChangesAsync();
+
+            await userDBLog.LogAsync(user, $"Participation Changed to: {weddingParticipation}");
+
 
             return Ok(new
             {
@@ -129,6 +139,8 @@ namespace WeddingSite.Api.Controllers
             {
                 return NotFound();
             }
+
+            await userDBLog.LogAsync(user, $"Removing participation: {weddingParticipation}");
 
             context.WeddingParticipations.Remove(weddingParticipation);
 
