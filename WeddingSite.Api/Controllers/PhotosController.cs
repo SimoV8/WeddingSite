@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using WeddingSite.Api.Data;
+using WeddingSite.Api.Models;
 
 namespace WeddingSite.Api.Controllers
 {
@@ -30,7 +31,17 @@ namespace WeddingSite.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetPhotos()
         {
-            var photos = applicationDbContext.UserUploadedPhotos.Select(photo => new { Id = photo.FileName, ContentType = photo.ContentType, UserId = photo.UserId, CreatedAt = photo.UploadedAt, UserName = photo.User.FullName }).ToList();
+            var photos = applicationDbContext.UserUploadedPhotos.Select(photo => new PhotoInfo()
+            {
+                Id = photo.FileName,
+                ContentType = photo.ContentType,
+                UserId = photo.UserId,
+                CreatedAt = photo.UploadedAt,
+                UserName = photo.User.FullName,
+            }).ToList();
+
+            photos = photos.OrderByDescending(p => p.CreatedAt).ToList();
+
             return Ok(photos);
         }
 
@@ -110,7 +121,14 @@ namespace WeddingSite.Api.Controllers
                 logger.LogInformation($"File '{fileName}' uploaded successfully");
 
                 // 7. Return a success response
-                return Ok(uploadedPhoto);
+                return Ok(new PhotoInfo()
+                {
+                    Id = uploadedPhoto.FileName,
+                    ContentType = uploadedPhoto.ContentType,
+                    UserId = uploadedPhoto.UserId,
+                    CreatedAt = uploadedPhoto.UploadedAt,
+                    UserName = uploadedPhoto.User.FullName,
+                });
 
             }
             catch (IOException ex)

@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Swashbuckle.Swagger;
-using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
 using System.Text;
 using WeddingSite.Api.Data;
@@ -132,7 +130,8 @@ if (!string.IsNullOrEmpty(port))
     var url = $"http://0.0.0.0:{port}";
 
     app.Run(url);
-} else
+}
+else
 {
     app.Run();
 }
