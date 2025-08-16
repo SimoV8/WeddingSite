@@ -9,6 +9,7 @@ using WeddingSite.Api.Services;
 namespace WeddingSite.Api.Controllers
 {
     [Authorize]
+    [Route("[controller]")]
     public class GiftsController : Controller
     {
         private const string BUCKET_NAME = "wedding-vanessa-simone-bucket";
