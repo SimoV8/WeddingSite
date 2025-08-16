@@ -9,11 +9,12 @@ namespace WeddingSite.Api.Services
     public class TokenService : ITokenService
     {
         private readonly IConfiguration config;
-        private static readonly Dictionary<string, string> _refreshTokens = new(); // replace with DB
+        private readonly ApplicationDbContext applicationDbContext;
 
-        public TokenService(IConfiguration config)
+        public TokenService(IConfiguration config, ApplicationDbContext applicationDbContext)
         {
             this.config = config;
+            this.applicationDbContext = applicationDbContext;
         }
 
         public TokenResponse GenerateTokens(ApplicationUser user)
@@ -21,8 +22,24 @@ namespace WeddingSite.Api.Services
             var accessToken = GenerateAccessToken(user);
             var refreshToken = Guid.NewGuid().ToString();
 
-            // store refresh token (for demo in-memory; in production use DB table)
-            _refreshTokens[user.Id] = refreshToken;
+            // First delete token already associated to the user
+            var toDelete = applicationDbContext.UserRefreshTokens.Where(x => x.UserId == user.Id);
+            applicationDbContext.UserRefreshTokens.RemoveRange(toDelete);
+
+            // Create a new token
+            var refreshTokenObj = new UserRefreshToken() 
+            { 
+                RefreshToken = refreshToken, 
+                CreatedAt = DateTime.Now, 
+                ExpiresAt = DateTime.Now.AddDays(30), 
+                UserId = user.Id,
+                User = user,
+            }; 
+
+            // Store refresh token in DB
+            applicationDbContext.UserRefreshTokens.Add(refreshTokenObj);
+            applicationDbContext.SaveChanges();
+
 
             return new TokenResponse
             {
@@ -74,15 +91,18 @@ namespace WeddingSite.Api.Services
 
         public ApplicationUser? ValidateRefreshToken(string refreshToken)
         {
-            return null;// _refreshTokens.TryGetValue(userId, out var stored) && stored == refreshToken;
+            // Search the given token in DB and ensure it's not expired yet
+            var token =  applicationDbContext.UserRefreshTokens.FirstOrDefault(x => x.RefreshToken == refreshToken && x.ExpiresAt >= DateTime.Now);
+            // If the token is found, return the associated user
+            return token?.User;
         }
 
         public void RevokeRefreshToken(string userId)
         {
-            if (_refreshTokens.TryGetValue(userId, out var stored))
-            {
-                _refreshTokens.Remove(userId);
-            }
+            var toDelete = applicationDbContext.UserRefreshTokens.Where(x => x.UserId == userId);
+            applicationDbContext.UserRefreshTokens.RemoveRange(toDelete);
+
+            applicationDbContext.SaveChanges();
         }
     }
 

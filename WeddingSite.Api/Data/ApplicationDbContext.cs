@@ -13,7 +13,9 @@ namespace WeddingSite.Api.Data
 
         public DbSet<WeddingMessage> WeddingMessages { get; set; } = null!;
 
-        public DbSet<WeddingParticipation> WeddingParticipation { get; set; } = null!;
+        public DbSet<WeddingParticipation> WeddingParticipations { get; set; } = null!;
+
+        public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -28,6 +30,16 @@ namespace WeddingSite.Api.Data
                 .HasOne(m => m.User)
                 .WithMany()
                 .HasForeignKey(m => m.UserId);
+
+            builder.Entity<UserRefreshToken>(entity => {
+                entity.HasOne(m => m.User)
+               .WithMany()
+               .HasForeignKey(m => m.UserId)
+               .OnDelete(DeleteBehavior.NoAction);
+
+                entity.Property(e => e.RefreshToken).HasColumnType("VARCHAR").HasMaxLength(250);
+            });
+               
         }
     }
 }
